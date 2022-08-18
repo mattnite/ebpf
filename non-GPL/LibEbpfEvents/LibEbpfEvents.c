@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <sys/resource.h>
 
 #include "EventProbe.skel.h"
 
@@ -280,6 +281,18 @@ int ebpf_event_ctx__new(struct ebpf_event_ctx **ctx,
 {
     int err                      = 0;
     struct EventProbe_bpf *probe = NULL;
+
+    // pre 5.11 kernels bpf uses memlock rlimit instead of cgroups, so setting
+    // it to infinity is needed for these kernels (okay because we run as a
+    // privileged container).
+    //
+    // https://lore.kernel.org/bpf/20201201215900.3569844-1-guro@fb.com/t/#u
+    struct rlimit rlim_new = {
+        .rlim_cur   = RLIM_INFINITY,
+        .rlim_max   = RLIM_INFINITY,
+    };
+
+    setrlimit(RLIMIT_MEMLOCK, &rlim_new);
 
     struct btf *btf = btf__load_vmlinux_btf();
     if (libbpf_get_error(btf))
